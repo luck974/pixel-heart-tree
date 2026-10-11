@@ -1,0 +1,848 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>像素心树 · 星愿之旅</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        body {
+            background: #07041a;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: 'Courier New', 'VT323', monospace;
+            overflow: hidden;
+        }
+        canvas {
+            display: block;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.6);
+            cursor: crosshair;
+            image-rendering: crisp-edges;
+            image-rendering: pixelated;
+            border-radius: 20px;
+        }
+
+        .music-toggle {
+            position: fixed;
+            top: 20px;
+            right: 25px;
+            width: 52px;
+            height: 52px;
+            background: #2c2a2e;
+            border: 3px solid #ffb7c5;
+            box-shadow: inset -2px -2px 0 #1a1820, inset 2px 2px 0 #ffd0e0;
+            cursor: pointer;
+            z-index: 200;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            border-radius: 12px;
+            transition: 0.05s linear;
+        }
+        .music-toggle:active { transform: scale(0.93); }
+
+        .heart-counter {
+            position: fixed;
+            top: 20px;
+            left: 25px;
+            background: #2c2a2ebb;
+            border: 3px solid #ffb7c5;
+            box-shadow: inset -2px -2px 0 #1a1820, inset 2px 2px 0 #ffd0e0;
+            color: #ffe6f0;
+            font-family: 'Courier New', monospace;
+            font-weight: bold;
+            font-size: 19px;
+            padding: 6px 14px;
+            border-radius: 12px;
+            z-index: 200;
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+        .heart-counter.bump { animation: bump 0.32s ease; }
+        @keyframes bump {
+            0% { transform: scale(1); }
+            40% { transform: scale(1.3); }
+            100% { transform: scale(1); }
+        }
+
+        .info-panel {
+            position: fixed;
+            bottom: 18px;
+            left: 18px;
+            background: #2a1e2cbb;
+            backdrop-filter: blur(4px);
+            border: 2px solid #ffb7c5;
+            padding: 6px 12px;
+            color: #ffe6f0;
+            font-size: 13px;
+            font-weight: bold;
+            font-family: monospace;
+            z-index: 200;
+            border-radius: 20px;
+            line-height: 1.6;
+        }
+        .info-panel span { color: #ffd966; }
+
+        .letter-modal {
+            position: fixed;
+            inset: 0;
+            background: rgba(10,6,20,0.72);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            backdrop-filter: blur(2px);
+        }
+        .letter-sheet {
+            width: min(430px, 90vw);
+            background: #1c1430;
+            border: 6px solid #ff99bb;
+            box-shadow: 0 0 0 4px #ffd966, 0 14px 40px rgba(0,0,0,0.6);
+            border-radius: 8px;
+            padding: 22px;
+            font-family: 'Courier New', monospace;
+            text-align: center;
+            color: #ffe6f0;
+        }
+        .letter-title { font-size: 22px; margin-bottom: 12px; color: #ffd966; }
+        .letter-sheet pre {
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            white-space: pre-wrap;
+            background: #241a3a;
+            padding: 16px;
+            border-radius: 6px;
+            color: #ffd9e6;
+            line-height: 1.6;
+            text-align: left;
+            max-height: 52vh;
+            overflow: auto;
+        }
+        .letter-sheet button {
+            margin-top: 16px;
+            background: #ff88aa;
+            border: none;
+            padding: 10px 24px;
+            border-radius: 4px;
+            color: #2b1222;
+            font-weight: bold;
+            font-family: 'Courier New', monospace;
+            cursor: pointer;
+            box-shadow: 3px 3px 0 #a54e6e;
+            font-size: 15px;
+        }
+        .letter-sheet button:active {
+            transform: translate(2px, 2px);
+            box-shadow: 1px 1px 0 #a54e6e;
+        }
+    </style>
+</head>
+<body>
+<div class="music-toggle" id="musicToggleBtn">🎵</div>
+<div class="heart-counter" id="heartCounter">❤ <span id="heartCount">0</span></div>
+<div class="info-panel">
+    🌙 点地面 → 小人漫步 &nbsp;|&nbsp; 🌳 点树 → 掉爱心/信<br>
+    ❤ 走近爱心 → 收集 &nbsp;|&nbsp; 💌 点信件 → 阅读
+</div>
+<canvas id="pixelCanvas" width="900" height="600"></canvas>
+
+<script>
+(function(){
+    "use strict";
+
+    /* ================= 可自定义配置 ================= */
+    const CONFIG = {
+        letter: `✨ 致 独一无二的你 ✨
+
+当星光落在那棵心树上，
+我为你种下的秘密开始发芽。
+
+每一次点击，都是一句未说出口的温柔；
+每一次掉落，都是宇宙在替你回答。
+
+你收集的爱心和这封信，
+都是我用代码写下的情诗。
+
+愿你的世界，永远有浪漫的流星，
+和一颗等你点击的心。
+
+—— 心树上的回信 · 永远为你编译 💖`
+    };
+
+    /* ================= 基础 ================= */
+    const canvas = document.getElementById('pixelCanvas');
+    const ctx = canvas.getContext('2d');
+    const W = 900, H = 600;
+    canvas.width = W;
+    canvas.height = H;
+
+    const rand = (min, max) => min + Math.random() * (max - min);
+    const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+
+    // 适配屏幕：等比缩放 + letterbox，保持像素锐利
+    function fitCanvas() {
+        const pad = 14;
+        const s = Math.min((window.innerWidth - pad) / W, (window.innerHeight - pad) / H);
+        canvas.style.width = Math.floor(W * s) + 'px';
+        canvas.style.height = Math.floor(H * s) + 'px';
+    }
+    window.addEventListener('resize', fitCanvas);
+    fitCanvas();
+
+    // 柔和光斑 sprite（预渲染，性能好）
+    function makeGlow(r, g, b, a) {
+        const s = 64, c = document.createElement('canvas');
+        c.width = c.height = s;
+        const x = c.getContext('2d');
+        const gr = x.createRadialGradient(s/2, s/2, 0, s/2, s/2, s/2);
+        gr.addColorStop(0, 'rgba(255,255,255,0.95)');
+        gr.addColorStop(0.25, `rgba(${r},${g},${b},${a})`);
+        gr.addColorStop(1, `rgba(${r},${g},${b},0)`);
+        x.fillStyle = gr;
+        x.fillRect(0, 0, s, s);
+        return c;
+    }
+    const GLOW_WARM  = makeGlow(255, 214, 150, 0.55);
+    const GLOW_PINK  = makeGlow(255, 138, 168, 0.55);
+    const GLOW_WHITE = makeGlow(255, 255, 255, 0.6);
+
+    /* ================= 音频（Web Audio 合成，无外部文件） ================= */
+    const AudioSys = (() => {
+        let ctx = null, master = null, musicBus = null;
+        let musicOn = false, schedulerId = null;
+        let nextNoteTime = 0, chordIdx = 0;
+
+        const CHORDS = [
+            [130.81, 261.63, 329.63, 392.00], // C
+            [110.00, 220.00, 261.63, 329.63], // Am
+            [ 87.31, 174.61, 220.00, 261.63], // F
+            [ 98.00, 196.00, 246.94, 293.66], // G
+        ];
+        const CHORD_DUR = 4.2;
+
+        function ensure() {
+            if (ctx) return ctx;
+            ctx = new (window.AudioContext || window.webkitAudioContext)();
+            master = ctx.createGain();
+            master.gain.value = 0.6;
+            master.connect(ctx.destination);
+
+            musicBus = ctx.createGain();
+            musicBus.gain.value = 0.0;
+            musicBus.connect(master);
+
+            const delay = ctx.createDelay(2);
+            delay.delayTime.value = 0.45;
+            const fb = ctx.createGain(); fb.gain.value = 0.32;
+            const wet = ctx.createGain(); wet.gain.value = 0.25;
+            musicBus.connect(delay);
+            delay.connect(fb); fb.connect(delay);
+            delay.connect(wet); wet.connect(master);
+            return ctx;
+        }
+
+        function tone(freq, type, dur, vol, when, dest, attack) {
+            const t0 = when != null ? when : ctx.currentTime;
+            const osc = ctx.createOscillator();
+            const g = ctx.createGain();
+            osc.type = type;
+            osc.frequency.value = freq;
+            const a = attack != null ? attack : 0.02;
+            g.gain.setValueAtTime(0.0001, t0);
+            g.gain.linearRampToValueAtTime(vol, t0 + a);
+            g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+            osc.connect(g); g.connect(dest || master);
+            osc.start(t0); osc.stop(t0 + dur + 0.05);
+        }
+
+        function playChord(notes, when, dur) {
+            notes.forEach((f, i) => {
+                tone(f, i === 0 ? 'sine' : 'triangle', dur, i === 0 ? 0.16 : 0.07, when, musicBus, dur * 0.4);
+            });
+            // 和弦切换时的轻柔高音，增加一点灵气
+            tone(notes[0] * 4, 'sine', 1.2, 0.03, when, musicBus, 0.02);
+        }
+
+        function scheduler() {
+            while (nextNoteTime < ctx.currentTime + 6) {
+                playChord(CHORDS[chordIdx % CHORDS.length], nextNoteTime, CHORD_DUR);
+                nextNoteTime += CHORD_DUR;
+                chordIdx++;
+            }
+        }
+
+        function startMusic() {
+            ensure();
+            if (ctx.state === 'suspended') ctx.resume();
+            musicOn = true;
+            const t = ctx.currentTime;
+            musicBus.gain.cancelScheduledValues(t);
+            musicBus.gain.setValueAtTime(musicBus.gain.value, t);
+            musicBus.gain.linearRampToValueAtTime(0.16, t + 1.6);
+            if (schedulerId == null) {
+                nextNoteTime = t + 0.1;
+                scheduler();
+                schedulerId = setInterval(scheduler, 1000);
+            }
+        }
+
+        function stopMusic() {
+            if (!ctx || !musicBus) return;
+            musicOn = false;
+            const t = ctx.currentTime;
+            musicBus.gain.cancelScheduledValues(t);
+            musicBus.gain.setValueAtTime(musicBus.gain.value, t);
+            musicBus.gain.linearRampToValueAtTime(0.0, t + 0.8);
+            if (schedulerId != null) { clearInterval(schedulerId); schedulerId = null; }
+        }
+
+        function toggle() {
+            if (musicOn) stopMusic(); else startMusic();
+            return musicOn;
+        }
+
+        function sfx(name) {
+            ensure();
+            if (ctx.state === 'suspended') ctx.resume();
+            const now = ctx.currentTime;
+            switch (name) {
+                case 'click':
+                    tone(660, 'square', 0.07, 0.04, now);
+                    break;
+                case 'drop':
+                    tone(320, 'triangle', 0.12, 0.09, now);
+                    tone(180, 'sine', 0.16, 0.1, now + 0.03);
+                    break;
+                case 'land':
+                    tone(150, 'sine', 0.2, 0.12, now);
+                    break;
+                case 'pickup':
+                    tone(880, 'triangle', 0.12, 0.08, now);
+                    tone(1318, 'triangle', 0.16, 0.06, now + 0.07);
+                    break;
+                case 'letter':
+                    [523.25, 659.25, 783.99, 1046.5].forEach((f, i) =>
+                        tone(f, 'triangle', 0.5, 0.07, now + i * 0.12));
+                    break;
+            }
+        }
+
+        return { ensure, toggle, isOn: () => musicOn, sfx };
+    })();
+
+    /* ================= 星空 / 流星 / 月亮 ================= */
+    let stars = [];
+    const STAR_COUNT = 280;
+
+    function initStars() {
+        stars = [];
+        for (let i = 0; i < STAR_COUNT; i++) {
+            stars.push({
+                x: Math.random() * W,
+                y: Math.random() * H,
+                size: Math.random() * 2.2 + 1,
+                baseAlpha: Math.random() * 0.6 + 0.2,
+                alpha: 0,
+                twinkleSpeed: 0.005 + Math.random() * 0.02,
+                angle: Math.random() * Math.PI * 2,
+                bright: Math.random() < 0.1,
+            });
+        }
+    }
+
+    function drawStars() {
+        for (const s of stars) {
+            s.angle += s.twinkleSpeed;
+            const v = (Math.sin(s.angle) + 1) / 2;
+            s.alpha = s.baseAlpha * (0.3 + v * 0.7);
+            ctx.fillStyle = `rgba(255,240,210,${s.alpha})`;
+            ctx.fillRect(s.x, s.y, s.size, s.size);
+            if (s.bright) {
+                ctx.fillStyle = `rgba(255,250,230,${s.alpha * 0.5})`;
+                ctx.fillRect(s.x - 1, s.y, 1, s.size);
+                ctx.fillRect(s.x, s.y - 1, s.size, 1);
+            }
+        }
+    }
+
+    let meteors = [];
+    const METEOR_CHANCE = 0.012;
+
+    function addMeteor() {
+        const fromX = rand(W * 0.2, W * 0.9);
+        const fromY = rand(0, H * 0.4);
+        const angle = Math.PI / 3.5 + (Math.random() - 0.5) * 0.6;
+        const speed = 4 + Math.random() * 8;
+        meteors.push({
+            x: fromX, y: fromY,
+            vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed,
+            trails: [], alive: true,
+        });
+    }
+
+    function updateMeteors() {
+        for (let i = 0; i < meteors.length; i++) {
+            const m = meteors[i];
+            m.trails.unshift({ x: m.x, y: m.y });
+            if (m.trails.length > 14) m.trails.pop();
+            m.x += m.vx; m.y += m.vy;
+            if (m.x > W + 80 || m.x < -80 || m.y > H + 80 || m.y < -80) m.alive = false;
+        }
+        meteors = meteors.filter(m => m.alive);
+        if (Math.random() < METEOR_CHANCE && meteors.length < 3) addMeteor();
+    }
+
+    function drawMeteors() {
+        for (const m of meteors) {
+            for (let i = 0; i < m.trails.length; i++) {
+                const t = m.trails[i];
+                const k = 1 - i / m.trails.length;
+                ctx.fillStyle = `rgba(255,${Math.floor(180 + 60 * k)},${Math.floor(140 + 80 * k)},${(k * 0.8).toFixed(2)})`;
+                ctx.fillRect(t.x, t.y, 2, 2);
+            }
+            ctx.fillStyle = '#fff6e0';
+            ctx.fillRect(m.x, m.y, 3, 3);
+        }
+    }
+
+    function drawMoon(now) {
+        const mx = W - 150, my = 95, r = 32;
+        const a = 0.5 + 0.1 * Math.sin(now * 0.6);
+        ctx.globalAlpha = a;
+        ctx.drawImage(GLOW_WHITE, mx - r * 2.4, my - r * 2.4, r * 4.8, r * 4.8);
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = '#f6ecc8';
+        ctx.beginPath(); ctx.arc(mx, my, r, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#e4d5a8';
+        ctx.beginPath(); ctx.arc(mx - 9, my - 8, 7, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(mx + 10, my + 6, 5, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(mx + 2, my + 14, 3.5, 0, Math.PI * 2); ctx.fill();
+    }
+
+    function drawSky() {
+        const g = ctx.createLinearGradient(0, 0, 0, H);
+        g.addColorStop(0, '#07041a');
+        g.addColorStop(0.45, '#151033');
+        g.addColorStop(0.75, '#2a1a4d');
+        g.addColorStop(1, '#3b2458');
+        ctx.fillStyle = g;
+        ctx.fillRect(0, 0, W, H);
+    }
+
+    /* ================= 地面 ================= */
+    const centerX = W / 2;
+    const baseY = 510;
+    const curveHeight = 35;
+    const halfWidth = 380;
+    function groundY(x) {
+        const dx = x - centerX;
+        const t = Math.abs(dx) / halfWidth;
+        if (t >= 1) return baseY;
+        return baseY - curveHeight * (1 - t * t);
+    }
+
+    function drawGround() {
+        for (let x = 0; x < W; x++) {
+            const yG = groundY(x);
+            ctx.fillStyle = '#7c5a3a';
+            for (let d = 0; d < 8; d++) ctx.fillRect(x, yG + d, 1, 1);
+            ctx.fillStyle = '#5f9e4a';
+            ctx.fillRect(x, yG - 4, 1, 5);
+            ctx.fillStyle = '#7bc75e';
+            ctx.fillRect(x, yG - 2, 1, 3);
+            if ((x * 7 + Math.floor(yG)) % 11 === 0) {
+                ctx.fillStyle = '#a5e07a';
+                ctx.fillRect(x, yG - 4, 1, 2);
+            }
+        }
+        for (let i = 0; i < 90; i++) {
+            const fx = (i * 131 + 37) % W;
+            const fy = groundY(fx) - 3;
+            ctx.fillStyle = ['#ffb7c5', '#ffe180', '#ffffff', '#d8c7ff'][i % 4];
+            ctx.fillRect(fx, fy, 2, 2);
+            ctx.fillStyle = '#ffe180';
+            ctx.fillRect(fx, fy, 1, 1);
+        }
+    }
+
+    /* ================= 心树 ================= */
+    const treeX = centerX;
+    let treeClickCount = 0;
+
+    const HEART_SHAPE = [
+        [0,1,1,0,1,1,0],
+        [1,1,1,1,1,1,1],
+        [1,1,1,1,1,1,1],
+        [0,1,1,1,1,1,0],
+        [0,0,1,1,1,0,0],
+        [0,0,0,1,0,0,0],
+    ];
+    function drawPixelHeart(x, y, color, s, hl) {
+        ctx.fillStyle = color;
+        for (let r = 0; r < HEART_SHAPE.length; r++) {
+            for (let c = 0; c < HEART_SHAPE[r].length; c++) {
+                if (HEART_SHAPE[r][c]) ctx.fillRect(x + c * s, y + r * s, s, s);
+            }
+        }
+        if (hl) {
+            ctx.fillStyle = 'rgba(255,255,255,0.65)';
+            ctx.fillRect(x + s, y + s, s, s);
+        }
+    }
+
+    const treeHearts = [
+        [-26,-24], [-10,-36], [6,-40], [24,-32], [36,-22],
+        [-38,-14], [38,-14], [-16,-46], [14,-48], [0,-50],
+        [-30,-32], [30,-30], [-8,-52], [20,-46]
+    ].map((p, i) => ({ x: p[0], y: p[1], phase: i * 0.9 }));
+
+    function drawTree(now) {
+        const rootY = groundY(treeX);
+        const trunkTop = rootY - 48;
+        const sway = Math.sin(now * 0.8) * 1.2;
+
+        ctx.fillStyle = '#8a5a3a';
+        for (let w = -14; w <= 14; w += 3) ctx.fillRect(treeX + w, trunkTop + 8, 4, 42);
+        ctx.fillStyle = '#c98a55';
+        ctx.fillRect(treeX - 12, trunkTop + 4, 24, 48);
+        ctx.fillStyle = '#a66a3f';
+        ctx.fillRect(treeX - 4, trunkTop + 20, 3, 6);
+        ctx.fillRect(treeX + 3, trunkTop + 34, 3, 5);
+
+        const layers = [
+            { color: '#3d7a3d', off: 44, step: 4, h: 34, div: 1.7, w: 4, y0: -8 },
+            { color: '#57a04a', off: 36, step: 3, h: 30, div: 2.0, w: 3, y0: -18 },
+            { color: '#6bb95a', off: 28, step: 3, h: 26, div: 2.3, w: 3, y0: -30 },
+        ];
+        for (const L of layers) {
+            ctx.fillStyle = L.color;
+            for (let off = -L.off; off <= L.off; off += L.step) {
+                const h = L.h - Math.abs(off) / L.div;
+                const sx = Math.round(sway * (1 - Math.abs(off) / L.off));
+                ctx.fillRect(treeX + off + sx, trunkTop + L.y0 + h, L.w, 7);
+            }
+        }
+
+        for (const h of treeHearts) {
+            const pulse = 0.7 + 0.3 * Math.sin(now * 2 + h.phase);
+            const hx = treeX + h.x + Math.round(sway * 0.6);
+            const hy = trunkTop + h.y;
+            ctx.globalAlpha = 0.28 * pulse;
+            ctx.drawImage(GLOW_PINK, hx - 9, hy - 9, 18, 18);
+            ctx.globalAlpha = 1;
+            drawPixelHeart(hx - 3, hy - 3, '#ff4d6d', 1, true);
+        }
+    }
+
+    /* ================= 萤火虫 ================= */
+    const fireflies = [];
+    function initFireflies() {
+        for (let i = 0; i < 16; i++) {
+            fireflies.push({
+                bx: treeX + rand(-95, 95),
+                by: trunkBaseY() + rand(-55, 30),
+                phase: rand(0, Math.PI * 2),
+                speed: rand(0.5, 1.3),
+            });
+        }
+    }
+    function trunkBaseY() { return groundY(treeX) - 48; }
+
+    function drawFireflies(now) {
+        for (const f of fireflies) {
+            const x = f.bx + Math.sin(now * f.speed + f.phase) * 22;
+            const y = f.by + Math.cos(now * f.speed * 0.8 + f.phase) * 14 + Math.sin(now * 0.5 + f.phase) * 6;
+            const tw = 0.4 + 0.6 * Math.abs(Math.sin(now * 2 + f.phase));
+            ctx.globalAlpha = tw * 0.9;
+            ctx.drawImage(GLOW_WARM, x - 5, y - 5, 10, 10);
+            ctx.globalAlpha = 1;
+            ctx.fillStyle = '#fff6c8';
+            ctx.fillRect(x, y, 2, 2);
+        }
+    }
+
+    /* ================= 掉落物（爱心 / 信件） ================= */
+    let items = [];
+    let hasActiveLetter = false;
+    let particles = [];
+
+    function spawnHeart(x) {
+        items.push({ type: 'heart', x: Math.min(W - 40, Math.max(40, x)), y: groundY(Math.min(W - 40, Math.max(40, x))) - 28, vy: 0, grounded: false });
+    }
+    function spawnLetter(x) {
+        if (hasActiveLetter) return;
+        const lx = Math.min(W - 50, Math.max(50, x));
+        items.push({ type: 'letter', x: lx, y: groundY(lx) - 32, vy: 0, grounded: false, opened: false, phase: rand(0, Math.PI * 2) });
+        hasActiveLetter = true;
+    }
+
+    function spawnLanding(x, y) {
+        for (let i = 0; i < 6; i++) {
+            particles.push({ x, y, vx: rand(-1.6, 1.6), vy: rand(-2.6, -0.5), life: rand(0.4, 0.8), max: 0.8, color: '#c9a06a', size: rand(1, 3), g: 0.15 });
+        }
+    }
+    function spawnPickup(x, y) {
+        const colors = ['#ffe180', '#ffb7c5', '#ffffff'];
+        for (let i = 0; i < 10; i++) {
+            particles.push({ x, y, vx: rand(-2.2, 2.2), vy: rand(-3.2, -1), life: rand(0.5, 0.9), max: 0.9, color: pick(colors), size: rand(1, 3), g: 0.2 });
+        }
+    }
+
+    function updateParticles() {
+        for (let i = 0; i < particles.length; i++) {
+            const p = particles[i];
+            p.vy += p.g;
+            p.x += p.vx; p.y += p.vy;
+            p.life -= 0.02;
+            if (p.life <= 0) { particles.splice(i, 1); i--; }
+        }
+    }
+    function drawParticles() {
+        for (const p of particles) {
+            ctx.fillStyle = p.color;
+            ctx.globalAlpha = Math.max(0, p.life / p.max);
+            ctx.fillRect(p.x, p.y, p.size, p.size);
+        }
+        ctx.globalAlpha = 1;
+    }
+
+    function updateItems() {
+        for (let i = 0; i < items.length; i++) {
+            const it = items[i];
+            if (!it.grounded) {
+                it.vy += 0.55;
+                it.y += it.vy;
+                const limit = groundY(it.x) - (it.type === 'heart' ? 5 : 7);
+                if (it.y >= limit) {
+                    it.y = limit;
+                    it.grounded = true;
+                    spawnLanding(it.x, groundY(it.x));
+                    AudioSys.sfx('land');
+                }
+            } else if (it.type === 'heart') {
+                if (Math.abs(player.x - it.x) < 11) {
+                    collected++;
+                    updateCounter();
+                    spawnPickup(it.x, it.y - 6);
+                    AudioSys.sfx('pickup');
+                    items.splice(i, 1);
+                    i--;
+                }
+            }
+        }
+        updateParticles();
+    }
+
+    function drawItems(now) {
+        for (const it of items) {
+            if (it.type === 'heart') {
+                drawPixelHeart(it.x - 3, it.y - 3, '#ff4f6e', 1, true);
+            } else if (it.type === 'letter' && !it.opened) {
+                const x = it.x, y = it.y;
+                ctx.fillStyle = '#ffe9c0';
+                ctx.fillRect(x - 9, y - 6, 18, 12);
+                ctx.fillStyle = '#e0a15c';
+                ctx.fillRect(x - 9, y - 6, 18, 1);
+                ctx.fillRect(x - 1, y - 5, 2, 2);
+                drawPixelHeart(x - 3, y - 1, '#ff4d6d', 1, true);
+                if (it.grounded) {
+                    const tw = 0.35 + 0.4 * Math.abs(Math.sin(now * 2 + it.phase));
+                    ctx.globalAlpha = tw;
+                    ctx.drawImage(GLOW_PINK, x - 11, y - 15, 22, 22);
+                    ctx.globalAlpha = 1;
+                }
+            }
+        }
+    }
+
+    /* ================= 小人 ================= */
+    let collected = 0;
+    const player = { x: 70, y: 0, targetX: 70, speed: 2.8, facing: 1, walk: 0 };
+    player.y = groundY(player.x);
+
+    function movePlayer() {
+        const dx = player.targetX - player.x;
+        if (Math.abs(dx) > 1) {
+            player.walk += 0.22;
+            player.x += Math.sign(dx) * Math.min(Math.abs(dx), player.speed);
+            player.x = Math.min(W - 45, Math.max(30, player.x));
+        } else {
+            player.x = player.targetX;
+        }
+        player.y = groundY(player.x);
+    }
+
+    function drawPlayer() {
+        const px = player.x, fy = player.y;
+        const moving = Math.abs(player.targetX - player.x) > 1;
+        const w = Math.floor(player.walk) % 2;
+        const leg = moving ? (w ? 1 : -1) : 0;
+
+        ctx.save();
+        ctx.translate(px, fy);
+        ctx.scale(player.facing, 1);
+
+        // 影子
+        ctx.fillStyle = 'rgba(0,0,0,0.28)';
+        ctx.fillRect(-7, -2, 14, 2);
+
+        // 腿 + 鞋
+        ctx.fillStyle = '#2c6e9e';
+        ctx.fillRect(-5, -12 + (leg === 1 ? 1 : 0), 4, 8 - (leg === 1 ? 1 : 0));
+        ctx.fillRect( 1, -12 + (leg === -1 ? 1 : 0), 4, 8 - (leg === -1 ? 1 : 0));
+        ctx.fillStyle = '#4a2f1a';
+        ctx.fillRect(-6, -4, 5, 4);
+        ctx.fillRect( 2, -4, 5, 4);
+
+        // 身体（红外套）
+        ctx.fillStyle = '#e33c2c';
+        ctx.fillRect(-6, -20, 12, 9);
+        ctx.fillStyle = '#b52a20';
+        ctx.fillRect(-6, -14, 12, 2);
+
+        // 手臂
+        ctx.fillStyle = '#e33c2c';
+        ctx.fillRect(-8, -20 + (leg === 1 ? 1 : 0), 3, 8);
+        ctx.fillRect( 5, -20 + (leg === -1 ? 1 : 0), 3, 8);
+        ctx.fillStyle = '#f7d0a0';
+        ctx.fillRect(-8, -13 + (leg === 1 ? 1 : 0), 3, 2);
+        ctx.fillRect( 5, -13 + (leg === -1 ? 1 : 0), 3, 2);
+
+        // 围巾（向后飘）
+        ctx.fillStyle = '#ff8aa8';
+        ctx.fillRect(-5, -23, 10, 3);
+        ctx.fillRect(-9, -22, 4, 3);
+
+        // 头 + 头发 + 眼睛
+        ctx.fillStyle = '#f7d0a0';
+        ctx.fillRect(-5, -28, 10, 8);
+        ctx.fillStyle = '#4b3621';
+        ctx.fillRect(-5, -30, 10, 3);
+        ctx.fillRect(-6, -29, 2, 4);
+        ctx.fillStyle = '#2b241c';
+        ctx.fillRect(2, -25, 2, 2);
+
+        ctx.restore();
+    }
+
+    /* ================= 计数器 UI ================= */
+    const heartCounterEl = document.getElementById('heartCounter');
+    const heartCountEl = document.getElementById('heartCount');
+    function updateCounter() {
+        heartCountEl.textContent = collected;
+        heartCounterEl.classList.remove('bump');
+        void heartCounterEl.offsetWidth;
+        heartCounterEl.classList.add('bump');
+    }
+
+    /* ================= 情书弹窗 ================= */
+    function showLoveLetter() {
+        const modal = document.createElement('div');
+        modal.className = 'letter-modal';
+        modal.innerHTML = `
+            <div class="letter-sheet">
+                <div class="letter-title">💌 星 河 回 音 💌</div>
+                <pre>${CONFIG.letter}</pre>
+                <button id="closeLetterBtn">❤ 珍藏于心 ❤</button>
+            </div>`;
+        document.body.appendChild(modal);
+        modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+        document.getElementById('closeLetterBtn').addEventListener('click', () => modal.remove());
+    }
+
+    /* ================= 交互 ================= */
+    function onTreeClick() {
+        if (hasActiveLetter) return;
+        AudioSys.sfx('drop');
+        if (treeClickCount < 2) {
+            spawnHeart(treeX + rand(-45, 45));
+            treeClickCount++;
+        } else {
+            spawnLetter(treeX + rand(-30, 30));
+            treeClickCount = 0;
+        }
+    }
+
+    function handleCanvasClick(e) {
+        const rect = canvas.getBoundingClientRect();
+        const sx = W / rect.width, sy = H / rect.height;
+        const mx = (e.clientX - rect.left) * sx;
+        const my = (e.clientY - rect.top) * sy;
+
+        // 1. 点信件 → 打开
+        for (let i = 0; i < items.length; i++) {
+            const it = items[i];
+            if (it.type === 'letter' && it.grounded && !it.opened) {
+                if (Math.abs(mx - it.x) < 14 && Math.abs(my - it.y) < 12) {
+                    it.opened = true;
+                    showLoveLetter();
+                    items.splice(i, 1);
+                    hasActiveLetter = false;
+                    AudioSys.sfx('letter');
+                    return;
+                }
+            }
+        }
+
+        // 2. 点树 → 掉爱心/信
+        const rootY = groundY(treeX);
+        if (mx > treeX - 60 && mx < treeX + 60 && my < rootY - 10 && my > rootY - 140) {
+            onTreeClick();
+            AudioSys.sfx('click');
+            return;
+        }
+
+        // 3. 点地面 → 小人走过去
+        const tx = Math.min(W - 45, Math.max(30, mx));
+        player.targetX = tx;
+        player.facing = tx >= player.x ? 1 : -1;
+        AudioSys.sfx('click');
+    }
+
+    /* ================= 音乐按钮 ================= */
+    const musicBtn = document.getElementById('musicToggleBtn');
+    musicBtn.addEventListener('click', () => {
+        const on = AudioSys.toggle();
+        musicBtn.textContent = on ? '🎶' : '🎵';
+    });
+
+    /* ================= 主循环 ================= */
+    function animate() {
+        const now = performance.now() / 1000;
+        movePlayer();
+        updateItems();
+        updateMeteors();
+
+        drawSky();
+        drawMoon(now);
+        drawStars();
+        drawMeteors();
+        drawGround();
+        drawTree(now);
+        drawFireflies(now);
+        drawItems(now);
+        drawParticles();
+        drawPlayer();
+
+        requestAnimationFrame(animate);
+    }
+
+    initStars();
+    initFireflies();
+    for (let i = 0; i < 3; i++) addMeteor();
+    canvas.addEventListener('click', handleCanvasClick);
+    animate();
+})();
+</script>
+</body>
+</html>
